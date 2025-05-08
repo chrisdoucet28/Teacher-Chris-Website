@@ -1,43 +1,85 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Teacher Chris - Upload Games</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; background: #f0f0f5; }
-    h1 { text-align: center; }
-    form, .game-entry { background: white; padding: 20px; margin: 20px auto; border-radius: 10px; max-width: 600px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    input, textarea, button { width: 100%; margin-top: 10px; padding: 8px; }
-    .game-entry { border-left: 5px solid #4caf50; }
-    .game-entry h3 { margin-top: 0; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background: #f0f0f5;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    form, .game-entry {
+      background: white;
+      padding: 20px;
+      margin: 20px auto;
+      border-radius: 10px;
+      max-width: 600px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    input, textarea, button, label {
+      width: 100%;
+      margin-top: 10px;
+      padding: 8px;
+    }
+
+    .game-entry {
+      border-left: 5px solid #4caf50;
+    }
+
+    .game-entry h3 {
+      margin-top: 0;
+    }
+
+    button {
+      background-color: #4caf50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    a {
+      color: #1a73e8;
+    }
   </style>
 </head>
 <body>
   <h1>Teacher Chris - 5th & 6th Grade Games</h1>
 
-
   <form id="uploadForm">
     <input type="text" id="title" placeholder="Game Title" required />
-    <input type="number" id="printQty" placeholder="Recommended print quantity (for class of 25)" required />
+    <input type="number" id="printQty" placeholder="Recommended print copies for 25 students" required />
     <textarea id="notes" placeholder="Optional notes..."></textarea>
+
     <label>PPT File:</label>
-    <input type="file" id="pptFile" accept=".ppt,.pptx" required />
+    <input type="file" id="pptFile" accept=".ppt,.pptx,.pdf" required />
+
     <label>Printable File (PDF/DOC):</label>
     <input type="file" id="printFile" accept=".pdf,.doc,.docx" required />
+
     <button type="submit">Upload Game</button>
   </form>
 
-
   <div id="gameList"></div>
 
-
-  <!-- Firebase JS SDK -->
+  <!-- Firebase SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
 
-
   <script>
+    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyD9KAz_Fx0BkPHTzeXc22iqTUX1pkmgWlM",
       authDomain: "teacherchris-4b6ea.firebaseapp.com",
@@ -48,53 +90,60 @@
       measurementId: "G-X7MY2DFPDW"
     };
 
-
+    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
     const storage = firebase.storage();
     const db = firebase.firestore();
 
-
     const form = document.getElementById("uploadForm");
     const gameList = document.getElementById("gameList");
-
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-
-      const title = document.getElementById("title").value;
+      const title = document.getElementById("title").value.trim();
       const printQty = document.getElementById("printQty").value;
       const notes = document.getElementById("notes").value;
       const pptFile = document.getElementById("pptFile").files[0];
       const printFile = document.getElementById("printFile").files[0];
 
+      if (!pptFile || !printFile) {
+        alert("Please select both files before uploading.");
+        return;
+      }
 
-      const pptRef = storage.ref().child(`games/${title}/${pptFile.name}`);
-      const printRef = storage.ref().child(`games/${title}/${printFile.name}`);
+      try {
+        const pptRef = storage.ref().child(`games/${title}/${pptFile.name}`);
+        const printRef = storage.ref().child(`games/${title}/${printFile.name}`);
 
+        const pptSnap = await pptRef.put(pptFile);
+        const printSnap = await printRef.put(printFile);
 
-      const pptSnap = await pptRef.put(pptFile);
-      const printSnap = await printRef.put(printFile);
+        const pptURL = await pptSnap.ref.getDownloadURL();
+        const printURL = await printSnap.ref.getDownloadURL();
 
+        await db.collection("games").add({
+          title,
+          printQty,
+          notes,
+          pptURL,
+          printURL,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-      const pptURL = await pptSnap.ref.getDownloadURL();
-      const printURL = await printSnap.ref.getDownloadURL();
-
-
-      await db.collection("games").add({
-        title, printQty, notes, pptURL, printURL,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
-
-
-      form.reset();
-      loadGames();
+        alert("Game uploaded successfully!");
+        form.reset();
+        loadGames();
+      } catch (error) {
+        console.error("Upload failed:", error);
+        alert("There was an error uploading your game.");
+      }
     });
-
 
     async function loadGames() {
       gameList.innerHTML = "";
       const snapshot = await db.collection("games").orderBy("timestamp", "desc").get();
+
       snapshot.forEach(doc => {
         const game = doc.data();
         const div = document.createElement("div");
@@ -104,12 +153,11 @@
           <p><strong>PPT:</strong> <a href="${game.pptURL}" target="_blank">Download</a></p>
           <p><strong>Print File:</strong> <a href="${game.printURL}" target="_blank">Download</a></p>
           <p><strong>Recommended Copies:</strong> ${game.printQty}</p>
-          <p>${game.notes || ""}</p>
+          ${game.notes ? `<p><strong>Notes:</strong> ${game.notes}</p>` : ""}
         `;
         gameList.appendChild(div);
       });
     }
-
 
     loadGames();
   </script>
